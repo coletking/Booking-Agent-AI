@@ -1,6 +1,6 @@
 # ghece-booking-agent
 
-TypeScript library for a **stays/hotels booking assistant**: OpenAI Chat Completions with function calling, **Zod-validated** tool arguments, and a **`BookingAgentBackend`** interface you implement for your API.
+TypeScript library for a **stays/hotels booking assistant**. Wraps **OpenAI Chat Completions** _or_ **Anthropic Claude** with function/tool calling, **Zod-validated** tool arguments, and a **`BookingAgentBackend`** interface you implement for your API.
 
 This package has **no** React or Next.js dependency. Run it on Node 20+ (uses `fetch`).
 
@@ -89,6 +89,62 @@ if (result.ok) {
 ```
 
 Adjust paths to match your backend. The default tool names map to common marketplace routes used in the reference app; fork or extend tools if your API differs.
+
+## Choosing an LLM provider (OpenAI or Claude)
+
+The SDK ships with two built-in providers behind a common
+`LlmProvider` interface. You opt in with the `provider` option.
+
+### OpenAI (default — backwards compatible)
+
+```ts
+await runBookingAgentTurn({
+  messages, backend, accountTypeId,
+  provider: "openai",                 // optional; this is the default
+  openAiApiKey: process.env.OPENAI_API_KEY,
+  model: "gpt-4o-mini",               // optional, defaults to gpt-4o-mini
+});
+```
+
+### Anthropic Claude
+
+```ts
+await runBookingAgentTurn({
+  messages, backend, accountTypeId,
+  provider: "anthropic",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  model: "claude-3-5-sonnet-20241022", // optional default
+});
+```
+
+Everything else — tools, intent router, conversation memory, summarizer,
+scope mode, security middleware, chat-turn limit — works identically
+across providers. The SDK normalizes message and tool-call formats
+internally so your backend code never changes.
+
+### Bring your own provider
+
+`LlmProvider` is a tiny interface:
+
+```ts
+import type { LlmProvider } from "ghece-booking-agent";
+
+const myProvider: LlmProvider = {
+  name: "gemini",
+  defaultModel: "gemini-1.5-pro",
+  async request({ apiKey, model, system, messages, tools, temperature }) {
+    // 1) serialize `messages` + `tools` to your provider's wire format
+    // 2) call the API
+    // 3) return { ok: true, content, toolCalls } or { ok: false, error }
+  },
+};
+
+await runBookingAgentTurn({
+  messages, backend, accountTypeId,
+  provider: myProvider,
+  apiKey: process.env.GEMINI_API_KEY,
+});
+```
 
 ## Conversation memory (optional)
 
@@ -417,8 +473,10 @@ chatLimit: {
 
 ## Environment
 
-- `OPENAI_API_KEY` — required for `runBookingAgentTurn`
+- `OPENAI_API_KEY` — required when `provider` is `"openai"` (default)
 - `OPENAI_MODEL` — optional, default `gpt-4o-mini`
+- `ANTHROPIC_API_KEY` — required when `provider` is `"anthropic"`
+- Claude default model: `claude-3-5-sonnet-20241022`
 
 ## License
 

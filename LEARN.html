@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Learning Guide — ghece-booking-agent</title>
+  <style>
+    :root {
+      --fg: #1a1a1a;
+      --muted: #555;
+      --bg: #ffffff;
+      --code-bg: #f4f4f6;
+      --border: #e2e2e6;
+      --accent: #0b5fff;
+    }
+    html, body { background: var(--bg); color: var(--fg); }
+    body {
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI",
+            Roboto, Helvetica, Arial, sans-serif;
+      max-width: 820px;
+      margin: 40px auto;
+      padding: 0 24px 80px;
+    }
+    h1, h2, h3, h4 { line-height: 1.25; margin-top: 2em; }
+    h1 { font-size: 2em; border-bottom: 2px solid var(--border); padding-bottom: .3em; }
+    h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .25em; }
+    h3 { font-size: 1.2em; }
+    a { color: var(--accent); }
+    code, pre {
+      font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    code {
+      background: var(--code-bg);
+      padding: .15em .35em;
+      border-radius: 4px;
+      font-size: .9em;
+    }
+    pre {
+      background: var(--code-bg);
+      padding: 14px 18px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: .88em;
+      line-height: 1.5;
+    }
+    pre code { background: transparent; padding: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+      font-size: .94em;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #fafafc; }
+    blockquote {
+      border-left: 4px solid var(--accent);
+      margin: 1em 0;
+      padding: .25em 1em;
+      background: #f7faff;
+      color: var(--muted);
+    }
+    .mermaid {
+      background: #fbfbfd;
+      padding: 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      text-align: center;
+      overflow-x: auto;
+      margin: 1em 0;
+    }
+    .print-hint {
+      position: sticky;
+      top: 0;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      color: #6a4f00;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 24px;
+      font-size: .9em;
+    }
+    @media print {
+      .print-hint { display: none; }
+      body { margin: 0; max-width: none; }
+      pre, .mermaid { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-hint">
+    To save as PDF: press <strong>Ctrl+P</strong>, then choose
+    <strong>Save as PDF</strong>. Wait a few seconds for the diagrams to
+    render before printing.
+  </div>
+  <article id="content">Loading…</article>
+
+  <script id="md-source" type="text/markdown">
+# Learning Guide: `ghece-booking-agent`
+
+> Welcome. This file is your guided tour of the SDK we built. You don't need
+> deep AI experience to follow along. Read top-to-bottom the first time. Keep
+> it open as a reference later.
+
+---
+
+## Table of contents
+
+1. [What this SDK actually is](#1-what-this-sdk-actually-is)
+2. [Vocabulary you'll see everywhere](#2-vocabulary-youll-see-everywhere)
+3. [The big picture (architecture)](#3-the-big-picture-architecture)
+4. [What happens on one user message (lifecycle)](#4-what-happens-on-one-user-message-lifecycle)
+5. [Module-by-module walkthrough](#5-module-by-module-walkthrough)
+6. [Memory: how the bot remembers](#6-memory-how-the-bot-remembers)
+7. [Security: how we keep it safe](#7-security-how-we-keep-it-safe)
+8. [Chat limit: WhatsApp handoff](#8-chat-limit-whatsapp-handoff)
+9. [Saving money on OpenAI](#9-saving-money-on-openai)
+10. [Testing: how we know it works](#10-testing-how-we-know-it-works)
+11. [Cheat sheet — common tasks](#11-cheat-sheet--common-tasks)
+
+---
+
+## 1. What this SDK actually is
+
+**Plain English:** This is a small JavaScript/TypeScript library that helps a
+booking website (yours) add an AI chatbot. The chatbot can answer questions
+about bookings, look up reservations, and check availability — by calling
+your existing API on the user's behalf.
+
+**Not a chatbot UI.** It's the *brain*. You still write the chat box in
+React/Next.js/whatever. The SDK is the part that, when a user types
+"show my upcoming trips", figures out:
+
+1. that the user wants a list of trips,
+2. calls *your* backend to get the data,
+3. takes that data and writes a friendly reply.
+
+**Library, not a service.** This is just code your server runs. It does
+not have its own database, its own server, or any infrastructure of its
+own. We talked about this in detail — the SDK runs *inside* your app.
+
+```mermaid
+flowchart LR
+    User(["User in browser"]) --> Web["Your web app<br/>(Next.js, etc.)"]
+    Web --> Server["Your server route<br/>(/api/chat)"]
+    Server -->|imports| SDK["ghece-booking-agent<br/>(this library)"]
+    SDK -->|HTTP| OpenAI["OpenAI API"]
+    SDK -->|methods you implement| Backend["Your booking API<br/>(via BookingAgentBackend)"]
+```
+
+---
+
+## 2. Vocabulary you'll see everywhere
+
+| Term | Meaning in plain English |
+|---|---|
+| **LLM** | "Large Language Model" — the AI brain (ChatGPT/GPT-4, etc.). We use OpenAI's model. |
+| **Prompt** | The text instructions you send to the LLM. The LLM reads it and writes a reply. |
+| **System prompt** | A special "you are X, follow these rules" message at the start of a conversation. |
+| **Tool / Function calling** | A way for the LLM to say "I need data — please call this function for me" instead of making up an answer. |
+| **Turn** | One round of: user sends message → AI replies. |
+| **Backend** | YOUR server's API endpoints (e.g. `/api/properties/...`). Not the SDK. |
+| **Middleware** | Code that runs *before* the main work — e.g. checking the API key before calling the AI. |
+| **SDK** | "Software Development Kit." A library with helpful functions that someone else (you) builds an app on top of. |
+| **Token** | A unit of text the LLM sees. ~1 word ≈ 1.3 tokens. You pay OpenAI per token. |
+| **Tool catalog** | A JSON list describing what tools (functions) the LLM is allowed to call. |
+| **Zod** | A library that checks data shapes at runtime (e.g. "is this string really a string?"). |
+
+---
+
+## 3. The big picture (architecture)
+
+The whole SDK is **9 small files** in `src/`. Here's how they relate:
+
+```mermaid
+flowchart TB
+    subgraph Public["Public API (what you import)"]
+        runTurn["runTurn.ts<br/>(runBookingAgentTurn)"]
+        index["index.ts<br/>(re-exports everything)"]
+    end
+
+    subgraph Pipeline["Request pipeline (in execution order)"]
+        security["security.ts<br/>API key, rate limit,<br/>SQL/prompt injection"]
+        chatLimit["chatLimit.ts<br/>WhatsApp handoff"]
+        intentRouter["intentRouter.ts<br/>Skip OpenAI for<br/>known phrases"]
+        openai["openai.ts<br/>Call OpenAI API"]
+        tools["tools.ts<br/>Run tool calls<br/>against backend"]
+        summarize["summarize.ts<br/>Compact long history"]
+    end
+
+    subgraph Support["Support modules"]
+        prompt["prompt.ts<br/>System prompt builder"]
+        openaiTools["openaiTools.ts<br/>Tool catalog (JSON Schema)"]
+        toolSchemas["toolSchemas.ts<br/>Zod arg validators"]
+        backend["backend.ts<br/>Interface YOU implement"]
+        listingsPath["listingsPath.ts<br/>Role → URL mapping"]
+        store["conversationStore.ts<br/>Memory interface"]
+    end
+
+    runTurn --> security
+    runTurn --> chatLimit
+    runTurn --> intentRouter
+    runTurn --> openai
+    runTurn --> tools
+    runTurn --> summarize
+    runTurn --> store
+    runTurn --> prompt
+    openai --> openaiTools
+    tools --> toolSchemas
+    tools --> backend
+    intentRouter --> tools
+```
+
+**The one entry point** that does everything: `runBookingAgentTurn()`. Every
+other file is a helper that it calls.
+
+---
+
+## 4. What happens on one user message (lifecycle)
+
+This is the most important diagram in the whole guide. Read it carefully.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant App as Your server
+    participant SDK as runBookingAgentTurn
+    participant Sec as security.ts
+    participant Lim as chatLimit.ts
+    participant IR as intentRouter
+    participant AI as OpenAI API
+    participant T as tools.ts
+    participant BE as Your backend
+
+    U->>App: "Show my upcoming trips"
+    App->>SDK: runBookingAgentTurn({...})
+    SDK->>Sec: validate key, words, SQL/prompt injection, rate limit
+    alt Security blocks
+        Sec-->>App: { ok: false, code: "INVALID_API_KEY" }
+        App-->>U: 401 / 429 / 400
+    else Pass
+        Sec-->>SDK: sanitized messages
+        SDK->>Lim: under chat-turn limit?
+        alt Limit exceeded
+            Lim-->>App: { ok: true, limited: true, reply: "WhatsApp link" }
+            App-->>U: support message
+        else Within limit
+            SDK->>IR: does any intent match?
+            alt Intent match (skip LLM)
+                IR->>T: execute tool
+                T->>BE: call backend.fetchXxx
+                BE-->>T: data
+                T-->>IR: JSON
+                IR-->>App: formatted reply
+            else No match → call LLM
+                SDK->>AI: messages + tool catalog
+                AI-->>SDK: "Call list_my_bookings"
+                SDK->>T: execute tool call
+                T->>BE: backend.fetchBookingsList
+                BE-->>T: trips JSON
+                T-->>SDK: JSON string
+                SDK->>AI: tool result
+                AI-->>SDK: "Here are your trips: ..."
+                SDK-->>App: { ok: true, reply }
+            end
+        end
+    end
+```
+
+Quick explanation of the loop in plain English:
+
+1. **Security checks** run first. If the user has a bad key, sends 5000-word
+   messages, or tries SQL injection — the SDK rejects immediately, no
+   OpenAI / no backend call. Saves money + protects you.
+
+2. **Chat-turn limit** runs next. Counted user messages > 4? Return the
+   WhatsApp handoff message and stop.
+
+3. **Intent router** runs next. If you've coded a shortcut for "show my
+   trips" — the SDK runs that instead of asking OpenAI. Saves money.
+
+4. **OpenAI loop** is the main path. It can take *multiple rounds*: the AI
+   asks for data, gets it, asks for more, gets it, then writes a reply.
+   We cap it at 8 rounds to prevent infinite loops.
+
+---
+
+## 5. Module-by-module walkthrough
+
+Here's what each file in `src/` does. I'll use plain English first, then
+show key code.
+
+### 5.1 `backend.ts` — the contract
+
+This is the **interface YOU implement**. It says: "If you give me an object
+with these 5 methods, the SDK will call them whenever it needs data from
+your server."
+
+```ts
+export interface BookingAgentBackend {
+  fetchBookingsList(input): Promise<unknown>;
+  fetchReservationDetail(reservationId): Promise<unknown>;
+  fetchBookingByCheckoutId(bookingId): Promise<unknown>;
+  postCheckAvailability(payload): Promise<unknown>;
+  fetchListingSnapshot(input): Promise<unknown>;
+  webSearch?(input): Promise<unknown>; // optional
+}
+```
+
+**Why this design?** Because the SDK doesn't know what URL your booking API
+uses, what auth headers to send, etc. By making *you* provide the
+implementations, the SDK stays generic and reusable.
+
+### 5.2 `prompt.ts` — the system prompt
+
+Builds the "you are a booking assistant" instruction sent to the LLM.
+
+Two modes:
+- **Strict** (default) — "only answer using my tools, decline anything else."
+- **Open** (`allowOutOfScope: true`) — "you may answer general questions,
+  and use `web_search` if needed."
+
+The system prompt also includes the user's **role** (guest/host/agent) so
+the AI knows what they can do.
+
+### 5.3 `openaiTools.ts` — the tool catalog
+
+A list of JSON-Schema descriptions of each tool the AI can call. Example:
+
+```js
+{
+  name: "list_my_bookings",
+  description: "List the signed-in user's bookings...",
+  parameters: {
+    type: "object",
+    properties: {
+      status: { type: "string" },
+      page: { type: "integer" },
+    },
+  },
+}
+```
+
+This is the **AI's menu**. When you send messages to OpenAI, you also send
+this catalog. The AI reads it and decides "I should call `list_my_bookings`
+with `{ status: "upcoming" }`."
+
+### 5.4 `toolSchemas.ts` — Zod runtime checks
+
+The AI sometimes hallucinates bad arguments (e.g. sends `page: "abc"` when
+it should be a number). Zod re-validates *every* tool call before it
+reaches your backend.
+
+Two layers, same job:
+- `openaiTools.ts` → tells the AI what's allowed (JSON Schema for the AI).
+- `toolSchemas.ts` → enforces it at runtime (Zod for our code).
+
+### 5.5 `openai.ts` — the HTTP wrapper
+
+A thin wrapper around OpenAI's chat-completions endpoint. It:
+
+1. Builds the HTTP POST.
+2. Sends `messages + tools + tool_choice: "auto"`.
+3. Parses the response into a `{ ok, choice }` shape.
+
+That's it. It does not contain any business logic. ~80 lines.
+
+### 5.6 `tools.ts` — the tool dispatcher
+
+When the AI says "call `list_my_bookings`", this file:
+
+1. Parses the AI's arguments string into JSON.
+2. Validates against the matching Zod schema.
+3. Calls the right `backend.fetchXxx()` method.
+4. Returns the result as a JSON string (what OpenAI expects).
+5. Wraps every error so a backend failure becomes `{ "error": "..." }` JSON
+   instead of a thrown exception.
+
+```mermaid
+flowchart LR
+    A["tool call from AI<br/>{ name, arguments }"] --> B{which tool?}
+    B -->|list_my_bookings| C[Zod validate]
+    C --> D[backend.fetchBookingsList]
+    B -->|get_booking_detail| E[Zod validate]
+    E --> F[backend.fetchReservationDetail]
+    B -->|web_search| G{backend.webSearch defined?}
+    G -->|yes| H[backend.webSearch]
+    G -->|no| I["error JSON"]
+    D --> J[JSON.stringify result]
+    F --> J
+    H --> J
+    J --> K[give back to OpenAI]
+```
+
+### 5.7 `runTurn.ts` — the orchestrator
+
+The biggest file (~300 lines). It chains everything together:
+
+```mermaid
+flowchart TB
+    Start([call runBookingAgentTurn]) --> Sec[Run security checks]
+    Sec -->|fail| Fail1[return error]
+    Sec -->|pass| Key[Check OPENAI_API_KEY]
+    Key -->|missing| Fail2[return MISSING_OPENAI_KEY]
+    Key -->|ok| San[Sanitize messages: trim to 30, max 12k chars each]
+    San --> Load[Load prior history from store]
+    Load --> CL[Check chat limit]
+    CL -->|exceeded| Fall["Return WhatsApp fallback<br/>(persist, return ok:true, limited:true)"]
+    CL -->|ok| IR{Intent router match?}
+    IR -->|yes| Skip[Run intent + persist + return]
+    IR -->|no| Loop[Enter OpenAI loop]
+    Loop --> Call[Call OpenAI]
+    Call --> Has{tool_calls?}
+    Has -->|no| Done[Persist + return reply]
+    Has -->|yes| Exec[Execute tools, append results, loop]
+    Exec --> Limit{8 rounds reached?}
+    Limit -->|no| Call
+    Limit -->|yes| Fail3[return TOOL_LIMIT]
+    Done --> Sum{summarize configured?}
+    Sum -->|yes| Compact[Compact older messages]
+    Sum -->|no| End([return])
+    Compact --> End
+```
+
+### 5.8 `conversationStore.ts` — memory
+
+An interface (`load`, `append`, `clear`) that the SDK uses to store/retrieve
+chat history. We ship `InMemoryConversationStore` for dev. For production
+you implement it against Redis/Postgres/etc. **No DB knowledge in the SDK.**
+
+### 5.9 `intentRouter.ts` — skip OpenAI
+
+A pre-LLM hook. You write rules like "if the message matches `/show my
+trips/i`, run `list_my_bookings` directly." When matched, OpenAI is **never
+called** — saves a lot of tokens for high-frequency phrases.
+
+### 5.10 `summarize.ts` — long-history compaction
+
+When stored history grows past N messages (e.g. 24), older messages are
+condensed into one paragraph (`[SUMMARY] ...`) and the most recent K
+messages stay verbatim. Keeps prompt size — and cost — bounded.
+
+### 5.11 `security.ts` — the gate
+
+5 features in one file:
+
+1. **`generateSdkApiKeys()`** — make crypto-secure keys for distribution.
+2. **`verifySdkApiKey()`** — timing-safe key check.
+3. **`countWords` / `detectSqlInjection` / `detectPromptInjection`** —
+   input validators.
+4. **`stripControlChars`** — clean junk bytes.
+5. **`InMemoryRateLimitStore`** — sliding-window limiter (pluggable).
+
+All wrapped by `runSecurityChecks()` which returns either sanitized
+messages or a typed failure.
+
+### 5.12 `chatLimit.ts` — handoff to humans
+
+Counts user messages in the session. Past `maxTurns` (default 4), returns
+a friendly message with a `wa.me` deep-link. No OpenAI call.
+
+### 5.13 `listingsPath.ts` — role → URL helper
+
+Tiny helper. Maps `accountTypeId` ("1"=guest, "2"=host, "3"=agent) to the
+right backend URL for the bookings list. That's it.
+
+---
+
+## 6. Memory: how the bot remembers
+
+### Without memory (default)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant SDK
+    participant AI
+    Note over U,AI: Turn 1
+    U->>SDK: "I want to book in Lagos"
+    SDK->>AI: messages=[user1]
+    AI-->>SDK: "Sure, when?"
+    SDK-->>U: reply
+    Note over U,AI: Turn 2 — bot has forgotten
+    U->>SDK: "next weekend"
+    SDK->>AI: messages=[user2]   ← only this turn!
+    AI-->>SDK: "What did you want to book?"
+    SDK-->>U: confused reply
+```
+
+### With memory (`store + sessionId`)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant SDK
+    participant Store as ConversationStore
+    participant AI
+    Note over U,AI: Turn 1
+    U->>SDK: "I want to book in Lagos"
+    SDK->>Store: load("user:42") → []
+    SDK->>AI: messages=[user1]
+    AI-->>SDK: "Sure, when?"
+    SDK->>Store: append("user:42", [user1, assistant1])
+    SDK-->>U: reply
+    Note over U,AI: Turn 2 — bot remembers!
+    U->>SDK: "next weekend"
+    SDK->>Store: load("user:42") → [user1, assistant1]
+    SDK->>AI: messages=[user1, assistant1, user2]
+    AI-->>SDK: "Lagos next weekend, got it. Any preferences?"
+    SDK->>Store: append("user:42", [user2, assistant2])
+    SDK-->>U: continuous reply
+```
+
+**Key takeaway:** memory is just *passing past messages back into the next
+prompt*. There's no magic. The LLM is stateless; we re-supply context each
+turn.
+
+---
+
+## 7. Security: how we keep it safe
+
+```mermaid
+flowchart TB
+    Req[Incoming request] --> A{API key in allowlist?}
+    A -->|no| F1[INVALID_API_KEY → 401]
+    A -->|yes| B{Within rate limit?}
+    B -->|no| F2[RATE_LIMITED → 429]
+    B -->|yes| C{Each message ≤ word limit?}
+    C -->|no| F3[MESSAGE_TOO_LONG → 400]
+    C -->|yes| D{User msg matches SQL pattern?}
+    D -->|yes| F4[BLOCKED_INPUT → 400]
+    D -->|no| E{User msg matches prompt-injection?}
+    E -->|yes| F5[BLOCKED_INPUT → 400]
+    E -->|no| G[Strip control chars]
+    G --> Pass[Continue to chat limit / intent / OpenAI]
+```
+
+Order matters: **cheapest checks first**. We reject bad keys before doing
+any other work, then word counting, then regex checks. Anything more
+expensive (OpenAI calls) only happens after these all pass.
+
+### Where each check lives in code
+
+| Check | Function | Default |
+|---|---|---|
+| API key | `verifySdkApiKey` | none (off until you set `apiKeys`) |
+| Word cap | `countWords` | **1000 words/message** |
+| SQL injection | `detectSqlInjection` | **on** |
+| Prompt injection | `detectPromptInjection` | **on** |
+| Control chars | `stripControlChars` | **on** |
+| Rate limit | `InMemoryRateLimitStore.consume` | none (off until configured) |
+
+---
+
+## 8. Chat limit: WhatsApp handoff
+
+```mermaid
+flowchart LR
+    A["User sends message #1<br/>(turn count = 1)"] --> AI1[AI replies]
+    AI1 --> B["#2 (count = 2)"] --> AI2[AI replies]
+    AI2 --> C["#3 (count = 3)"] --> AI3[AI replies]
+    AI3 --> D["#4 (count = 4)"] --> AI4[AI replies]
+    AI4 --> E["#5 (count = 5 > 4)"]
+    E --> F["Return WhatsApp message<br/>NO OpenAI call<br/>limited: true"]
+```
+
+The count is taken from `priorHistory + incoming` (only `role: "user"`
+messages count, not assistant replies). To make this reliable across page
+reloads, **always pair `chatLimit` with a `ConversationStore`**.
+
+The fallback message looks like:
+
+> You've reached the limit of 4 messages in this chat. Please continue
+> the conversation with our support team on WhatsApp:
+> https://wa.me/2348000000000?text=Hi%2C%20I%20need%20help...
+
+---
+
+## 9. Saving money on OpenAI
+
+OpenAI bills per **token** sent and received. Each turn sends:
+
+- system prompt (~150 tokens)
+- entire prior history
+- tool catalog (~600 tokens)
+- the user's new message
+
+So conversations get more expensive over time. Three ways to fight back,
+all built in:
+
+```mermaid
+flowchart LR
+    Ask[User question] --> R{Intent router match?}
+    R -->|yes| Skip["✓ ZERO tokens used"]
+    R -->|no| H{History too long?}
+    H -->|yes| Sum["Compact older msgs<br/>into a 1-paragraph summary"]
+    H -->|no| Send
+    Sum --> Send[Send to OpenAI]
+    Send --> Out[Get reply]
+```
+
+| Technique | Where | When to use |
+|---|---|---|
+| **Intent router** | `intentRouter.ts` | Common phrases like "show my trips", "help" — saves 100% of tokens |
+| **Summarization** | `summarize.ts` | Conversations that go beyond ~25 messages |
+| **Cheaper model** | `model: "gpt-4o-mini"` (default) | Already configured. Don't change unless you must. |
+
+---
+
+## 10. Testing: how we know it works
+
+We have **75 unit tests** across **7 files** in `tests/`. Run them:
+
+```bash
+npm test           # one-off
+npm run test:watch # auto-re-run on changes
+```
+
+```mermaid
+flowchart LR
+    A["75 tests in tests/"] --> B[chatLimit: 13]
+    A --> C[security: 21]
+    A --> D[conversationStore: 5]
+    A --> E[promptAndPath: 9]
+    A --> F[intentRouter: 6]
+    A --> G[tools: 10]
+    A --> H[runTurn: 11]
+```
+
+**Why tests matter:** when you (or a contributor) change a file later, the
+tests catch regressions immediately. Without them, every code change is a
+gamble. The whole suite runs in ~2 seconds.
+
+The tricky tests use **mocking**:
+
+- `tests/runTurn.test.ts` swaps `globalThis.fetch` with a fake that returns
+  pre-canned OpenAI responses. So we test the agent loop end-to-end
+  without ever calling the real OpenAI.
+- All backend-touching tests use a `stubBackend()` factory that satisfies
+  the `BookingAgentBackend` interface with no-op defaults.
+
+---
+
+## 11. Cheat sheet — common tasks
+
+### "Add a new tool the AI can call" (e.g. `cancel_booking`)
+
+1. Add the JSON Schema in `openaiTools.ts` → the AI's menu.
+2. Add a Zod schema in `toolSchemas.ts` → runtime validation.
+3. Add a method to `BookingAgentBackend` in `backend.ts`.
+4. Add a `case "cancel_booking":` branch in `tools.ts`.
+5. Implement the backend method in your app.
+6. (optional) Add a test in `tests/tools.test.ts`.
+
+### "Change the AI's tone / behavior"
+
+Edit the rules string in `prompt.ts`. The system prompt is just text — no
+magic.
+
+### "Block a country / specific user"
+
+Add a custom router (or new check) before the security middleware in your
+server route. The SDK's `security` is for *generic* protection.
+
+### "Use a different LLM provider"
+
+Replace `requestOpenAiChatCompletion` in `openai.ts` with a wrapper around
+your provider's API. Keep the return shape (`{ ok, choice }`) the same and
+nothing else needs to change.
+
+### "Move from in-memory store to Redis"
+
+Implement `ConversationStore` against Redis (your own file). Pass it
+where you currently pass `InMemoryConversationStore`. The SDK won't
+notice the difference.
+
+### "Generate new API keys"
+
+```ts
+import { generateSdkApiKeys } from "ghece-booking-agent";
+console.log(generateSdkApiKeys(5));
+```
+
+Run it once, save the output to your secrets manager, never commit.
+
+---
+
+## You did it
+
+You now understand:
+
+- What the SDK is and isn't (a library, not a service).
+- The 9 source files and what each does.
+- The full request lifecycle (security → chat limit → intent → OpenAI → tools).
+- How memory works (you re-supply context each turn).
+- Why we have two layers of schemas (JSON Schema for the AI, Zod for us).
+- How to keep costs down (intent router + summarizer + cheap model).
+- How to test changes (vitest, mock fetch, stub backend).
+
+When you forget something, come back here. When you change code, update the
+relevant section so this stays accurate.
+
+Happy shipping.
+
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    const md = document.getElementById('md-source').textContent;
+    const html = marked.parse(md, { breaks: false, gfm: true });
+    document.getElementById('content').innerHTML = html;
+
+    // Convert highlighted mermaid code blocks into Mermaid containers.
+    document.querySelectorAll('pre code.language-mermaid').forEach((code) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mermaid';
+      wrapper.textContent = code.textContent;
+      code.closest('pre').replaceWith(wrapper);
+    });
+
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+    mermaid.run({ querySelector: '.mermaid' });
+  </script>
+</body>
+</html>

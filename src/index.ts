@@ -1,3 +1,4 @@
+export { anthropicProvider } from "./anthropic.js";
 export type { BookingAgentBackend } from "./backend.js";
 export {
   buildChatLimitMessage,
@@ -18,17 +19,28 @@ export {
   type IntentRouter,
 } from "./intentRouter.js";
 export { bookingsListPathForAccountType } from "./listingsPath.js";
+export type {
+  LlmCompletionResult,
+  LlmMessage,
+  LlmProvider,
+  LlmTool,
+  LlmToolCall,
+} from "./llm.js";
 export {
   BOOKING_AGENT_OPENAI_TOOLS,
+  BOOKING_AGENT_TOOLS,
   WEB_SEARCH_OPENAI_TOOL,
+  WEB_SEARCH_TOOL,
   buildBookingAgentTools,
+  toAnthropicToolShape,
+  toOpenAiToolShape,
 } from "./openaiTools.js";
 export type {
   OpenAiChatMessage,
   OpenAiCompletionResult,
   OpenAiToolCall,
 } from "./openai.js";
-export { requestOpenAiChatCompletion } from "./openai.js";
+export { openAiProvider, requestOpenAiChatCompletion } from "./openai.js";
 export {
   buildBookingAgentSystemPrompt,
   type BookingAgentPromptOptions,
