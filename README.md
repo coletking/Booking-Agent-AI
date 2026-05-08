@@ -12,11 +12,14 @@ From npm:
 npm install ghece-booking-agent
 ```
 
-From the Git repository (app developers), install then build inside `node_modules/ghece-booking-agent` once, or use the published package above:
+From the Git repository (recommended for now, since the package isn't on npm). The `prepare` script auto-compiles TypeScript to `dist/` after install, so there's no manual build step:
 
 ```bash
+# Install latest main
 npm install git+https://github.com/coletking/Booking-Agent-AI.git#main
-cd node_modules/ghece-booking-agent && npm install && npm run build
+
+# Or pin to a release tag (recommended for production)
+npm install git+https://github.com/coletking/Booking-Agent-AI.git#v1.0.0
 ```
 
 For **npm publish**, `prepublishOnly` runs `build` so consumers get `dist/` from the tarball.
