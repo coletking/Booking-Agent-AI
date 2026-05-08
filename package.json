@@ -1,6 +1,6 @@
 {
-  "name": "booking-agent-sdk",
-  "version": "0.1.0",
+  "name": "ghece-booking-agent",
+  "version": "1.0.0",
   "description": "Reusable booking assistant: OpenAI tool loop + Zod-validated marketplace tools. Bring your own HTTP backend.",
   "license": "MIT",
   "type": "module",

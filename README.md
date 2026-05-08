@@ -1,4 +1,4 @@
-# booking-agent-sdk
+# ghece-booking-agent
 
 TypeScript library for a **stays/hotels booking assistant**: OpenAI Chat Completions with function calling, **Zod-validated** tool arguments, and a **`BookingAgentBackend`** interface you implement for your API.
 
@@ -6,17 +6,17 @@ This package has **no** React or Next.js dependency. Run it on Node 20+ (uses `f
 
 ## Install
 
-From a published package:
+From npm:
 
 ```bash
-npm install booking-agent-sdk
+npm install ghece-booking-agent
 ```
 
-From a Git repository (app developers), install then build inside `node_modules/booking-agent-sdk` once, or publish to a registry so `dist/` is included:
+From the Git repository (app developers), install then build inside `node_modules/ghece-booking-agent` once, or use the published package above:
 
 ```bash
 npm install git+https://github.com/coletking/Booking-Agent-AI.git#main
-cd node_modules/booking-agent-sdk && npm install && npm run build
+cd node_modules/ghece-booking-agent && npm install && npm run build
 ```
 
 For **npm publish**, `prepublishOnly` runs `build` so consumers get `dist/` from the tarball.
@@ -38,7 +38,7 @@ import {
   runBookingAgentTurn,
   bookingsListPathForAccountType,
   type BookingAgentBackend,
-} from "booking-agent-sdk";
+} from "ghece-booking-agent";
 
 const backend: BookingAgentBackend = {
   async fetchBookingsList({ status, page, perPage }) {
@@ -103,7 +103,7 @@ import {
   InMemoryConversationStore,
   runBookingAgentTurn,
   type ConversationStore,
-} from "booking-agent-sdk";
+} from "ghece-booking-agent";
 
 const store: ConversationStore = new InMemoryConversationStore({
   maxMessagesPerSession: 60,
@@ -122,7 +122,7 @@ const result = await runBookingAgentTurn({
 Custom store skeleton:
 
 ```ts
-import type { ConversationStore } from "booking-agent-sdk";
+import type { ConversationStore } from "ghece-booking-agent";
 
 export const redisStore: ConversationStore = {
   async load(sessionId) {
@@ -154,7 +154,7 @@ import {
   composeIntentRouters,
   runBookingAgentTurn,
   type IntentRouter,
-} from "booking-agent-sdk";
+} from "ghece-booking-agent";
 
 const showTrips: IntentRouter = (msg) => {
   if (!/^(show|list)\s+(my\s+)?(upcoming\s+)?(trips|bookings)\b/i.test(msg)) {
@@ -276,7 +276,7 @@ prefixed with `bsk_` (configurable). Store them server-side; share with
 trusted callers.
 
 ```ts
-import { generateSdkApiKeys } from "booking-agent-sdk";
+import { generateSdkApiKeys } from "ghece-booking-agent";
 
 console.log(generateSdkApiKeys(5));
 // [
@@ -295,7 +295,7 @@ import {
   generateSdkApiKeys,
   InMemoryRateLimitStore,
   runBookingAgentTurn,
-} from "booking-agent-sdk";
+} from "ghece-booking-agent";
 
 const ALLOWED_KEYS = process.env.SDK_KEYS!.split(",");
 const limiter = new InMemoryRateLimitStore();
